@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections.abc
 import importlib
 import importlib.util
 import sys
@@ -10,9 +11,13 @@ import typing
 if typing.TYPE_CHECKING:
     from smart_reload import node as node_m
 
-__all__: typing.Sequence[str] = ("ReloadManager", "import_module", "unload_module")
+__all__: collections.abc.Sequence[str] = (
+    "ReloadManager",
+    "import_module",
+    "unload_module",
+)
 
-_LoaderFunc = typing.Callable[[str, str | None], None] | None
+_LoaderFunc = collections.abc.Callable[[str, str | None], None] | None
 
 
 def import_module(name: str, package: str | None = None) -> None:
@@ -41,7 +46,7 @@ class ReloadManager:
         self._unload = unload_module
 
     @property
-    def modules(self) -> typing.Mapping[str, node_m.ModuleNode]:
+    def modules(self) -> collections.abc.Mapping[str, node_m.ModuleNode]:
         """The modules registered to this manager."""
         return self._modules
 
@@ -108,7 +113,7 @@ class ReloadManager:
     def find_dependency_order(
         self,
         module: node_m.ModuleNode,
-    ) -> typing.Sequence[typing.AbstractSet[node_m.ModuleNode]]:
+    ) -> collections.abc.Sequence[collections.abc.Set[node_m.ModuleNode]]:
         """Resolve reload dependency order for a module."""
         depth_map = {module: 0}
         min_depth = 0
