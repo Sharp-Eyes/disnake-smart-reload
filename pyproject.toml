@@ -21,6 +21,9 @@ disnake = "^2.9.2"
 ruff = "^0.6.3"
 pre-commit = "^3.8.0"
 
+[tool.isort]
+profile = "black"
+
 [tool.pyright]
 typeCheckingMode = "strict"
 python-version = 3.9
@@ -32,6 +35,9 @@ select = ["ALL"]
 ignore = [
     # `self` and `cls` do not need annotations.
     "ANN101", "ANN102",
+    # For now we ignore missing docstrings
+    # TODO remove these ignored errors
+    "D100", "D101", "D102",
     # Magic methods do not need documentation.
     "D105",
     # Class docstrings are at the class level.
@@ -48,6 +54,10 @@ ignore = [
     "B008",
     # We don't use pandas and this triggers on any `.values` access.
     "PD",
+    # Blank line before class
+    "D203",
+    # Private member accessed
+    "SLF001"
 ]
 
 [tool.ruff.per-file-ignores]

@@ -2,11 +2,11 @@
 
 Similar logic can be applied to other discord.py forks.
 """
+
 from __future__ import annotations
 
-from disnake.ext import commands
-
 import smart_reload
+from disnake.ext import commands
 
 bot = commands.Bot()
 manager = smart_reload.ReloadManager()

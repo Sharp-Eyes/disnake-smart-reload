@@ -17,12 +17,6 @@ repos:
       - id: black
         name: "run black in all files"
 
-  - repo: https://github.com/pycqa/isort
-    rev: 5.12.0
-    hooks:
-      - id: isort
-        name: "sort imports"
-
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: v0.3.4
     hooks:

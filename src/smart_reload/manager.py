@@ -14,6 +14,7 @@ __all__: typing.Sequence[str] = ("ReloadManager", "import_module", "unload_modul
 
 _LoaderFunc = typing.Callable[[str, str | None], None] | None
 
+
 def import_module(name: str, package: str | None = None) -> None:
     """Import a module."""
     importlib.import_module(name, package)
@@ -141,7 +142,7 @@ class ReloadManager:
         # min_depth through max_depth (inclusive) sets; each set holds the
         # dependencies for that depth.
         order: list[set[node_m.ModuleNode]] = [
-            set() for _ in range(min_depth, max_depth+1)
+            set() for _ in range(min_depth, max_depth + 1)
         ]
 
         for dependency, depth in depth_map.items():

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import typing
 
 __all__: typing.Sequence[str] = ("ModuleNode",)
@@ -9,7 +10,7 @@ class ModuleNode:
     name: str
     package: str | None
 
-    def __init__(self, path: str, name: str, package: str | None = None):
+    def __init__(self, path: str, name: str, package: str | None = None) -> None:
         self.path = path
         self.name = name
         self.package = package
@@ -24,26 +25,26 @@ class ModuleNode:
     def dependencies(self) -> typing.AbstractSet[ModuleNode]:
         return self.dependencies
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         # Probably unique enough?
         return hash(self.path)
-    
-    def add_dependent(self, dependent: ModuleNode):
+
+    def add_dependent(self, dependent: ModuleNode) -> None:
         self._dependents.add(dependent)
         dependent._dependencies.add(self)
 
-    def add_dependency(self, dependency: ModuleNode):
+    def add_dependency(self, dependency: ModuleNode) -> None:
         self._dependencies.add(dependency)
         dependency._dependents.add(self)
 
     def walk_dependencies(self) -> typing.Iterator[tuple[ModuleNode, int]]:
         for dependency in self._dependencies:
             yield from dependency._walk_dependencies(1)
-    
+
     def _walk_dependencies(self, depth: int) -> typing.Iterator[tuple[ModuleNode, int]]:
         yield self, depth
         for dependency in self._dependencies:
-            yield from dependency._walk_dependencies(depth+1)
+            yield from dependency._walk_dependencies(depth + 1)
 
     def walk_dependents(self) -> typing.Iterator[tuple[ModuleNode, int]]:
         for dependent in self._dependents:
@@ -52,4 +53,4 @@ class ModuleNode:
     def _walk_dependents(self, depth: int) -> typing.Iterator[tuple[ModuleNode, int]]:
         yield self, depth
         for dependent in self._dependents:
-            yield from dependent._walk_dependents(depth+1)
+            yield from dependent._walk_dependents(depth + 1)
