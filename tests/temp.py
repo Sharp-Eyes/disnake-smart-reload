@@ -1,9 +1,7 @@
-from disnake.ext import commands
-from smart_reload import ModuleNode, ExtensionManager
+from smart_reload import ModuleNode, ReloadManager
 
 
-bot = commands.Bot()
-manager = ExtensionManager(bot)
+manager = ReloadManager()
 
 
 def display_order(order: list[set[ModuleNode]]):

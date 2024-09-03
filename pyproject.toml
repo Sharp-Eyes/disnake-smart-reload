@@ -9,7 +9,6 @@ packages = [{include = "smart_reload", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
-disnake = "^2.9.2"
 
 [build-system]
 requires = ["poetry-core"]

@@ -1,63 +1,80 @@
 from __future__ import annotations
 import importlib
+import importlib.util
+import sys
 import typing
 
-from disnake.ext import commands  # TODO: possibly make lib-agnostic???
+from smart_reload import node as node_m
 
-from smart_reload import node
-
-__all__: typing.Sequence[str] = ("ExtensionManager",)
+__all__: typing.Sequence[str] = ("ReloadManager", "import_module", "unload_module")
 
 
-class ExtensionManager:
+def import_module(name: str, package: str | None = None):
+    importlib.import_module(name, package)
 
-    bot: commands.Bot
-    _modules: dict[str, node.ModuleNode]
 
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+def unload_module(name: str, package: str | None = None):
+    sys.modules.pop(importlib.util.resolve_name(name, package))
+
+
+class ReloadManager:
+
+    _modules: dict[str, node_m.ModuleNode]
+
+    def __init__(self):
         self._modules = {}
 
+        self._load = import_module
+        self._unload = unload_module
+
     @property
-    def modules(self) -> typing.Mapping[str, node.ModuleNode]:
+    def modules(self) -> typing.Mapping[str, node_m.ModuleNode]:
         return self._modules
 
-    def load_extension(self, name: str, *, package: str | None = None):
-        self.bot.load_extension(name, package=package)
+    def set_loader(self, loader: typing.Callable[[str, str | None], None] | None):
+        if not loader:
+            self._load = import_module
+        else:
+            self._load = loader
 
-        ...  # Make ModuleNodes for the imported extension (sys.modules[name])
+    def set_unloader(self, unloader: typing.Callable[[str, str | None], None] | None):
+        if not unloader:
+            self._load = unload_module
+        else:
+            self._load = unloader
 
-    def reload_extension(self, name: str, *, package: str):
-        self.bot.unload_extension(name, package=package)
+    def load_module(self, name: str, package: str | None = None):
+        self._load(name, package)
+
+        ...  # Make ModuleNodes for the imported module
+
+    def reload_module(self, name: str, *, package: str):
+        self._unload(name, package=package)
 
         # Unload all dependencies in reverse order...
         node = self._modules[name]
-        for dependencies in reversed(self.find_dependency_order(node)):
-            for dependency in dependencies:
-                ...  # Unload dependency
-
-        # Load all dependencies in order...
         for dependencies in self.find_dependency_order(node):
             for dependency in dependencies:
-                importlib.import_module(dependency.name, package=dependency.package)
+                self._unload(dependency.name, dependency.package)
 
-        self.bot.load_extension(name, package=package)
+        # Load the main extension again (automatically imports what it needs).
+        self.load_module(name, package=package)
 
-    def unload_extension(self, name: str, *, package: str | None):
-        self.bot.unload_extension(name, package=package)
+    def unload_module(self, name: str, package: str | None):
+        self._unload(name, package=package)
 
         node = self.modules[name]
         for dependency, _ in node.walk_dependencies():
             if not dependency.dependents:  # Safe to unload too
-                ...  # Unload dependency
+                self._unload(name, package)
 
-    def find_dependency_order(self, module: node.ModuleNode):
+    def find_dependency_order(self, module: node_m.ModuleNode):
         depth_map = {module: 0}
         min_depth = 0
         max_depth = 0
     
         # First check all dependencies of the module, keep only the occurrence of each
-        # dependency at greatest depth (earliest import as we import in reverse.)
+        # dependency at greatest depth.
         for dependency, search_depth in module.walk_dependencies():
             if dependency not in depth_map or search_depth > depth_map[dependency]:
                 depth_map[dependency] = search_depth
@@ -66,7 +83,7 @@ class ExtensionManager:
                 max_depth = search_depth
 
         # For each dependency, check all dependents. If we find a dependent we haven't
-        # added yet, add it. Keep only the occurrence of each depdent at smallest depth.
+        # added yet, add it. Keep only the occurrence of each dependent at smallest depth.
         for dependency, dep_depth in depth_map.copy().items():
             for dependent, search_depth in dependency.walk_dependents():
                 actual_depth = dep_depth - search_depth
@@ -81,9 +98,8 @@ class ExtensionManager:
 
         # Finally we combine the result into a list of sets. We need to house min_depth
         # through max_depth (inclusive) sets; each set holds the dependencies for that depth.
-        # The sets are populated reverse depth order. 
-        order: list[set[node.ModuleNode]] = [set() for _ in range(min_depth, max_depth+1)]
+        order: list[set[node_m.ModuleNode]] = [set() for _ in range(min_depth, max_depth+1)]
         for dependency, depth in depth_map.items():
-            order[max_depth - depth].add(dependency)
+            order[depth - min_depth].add(dependency)
 
         return order
