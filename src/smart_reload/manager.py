@@ -62,7 +62,6 @@ class ReloadManager:
             self._load = import_module
         else:
             self._load = loader
-            return loader
 
         return loader
 
