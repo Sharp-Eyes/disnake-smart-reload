@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
-import collections.abc
 import importlib
 import importlib.util
 import sys
 import typing
 
 if typing.TYPE_CHECKING:
+    import collections.abc
+
     from smart_reload import node as node_m
+
+    _LoaderFunc = collections.abc.Callable[[str, str | None], None] | None
 
 __all__: collections.abc.Sequence[str] = (
     "ReloadManager",
     "import_module",
     "unload_module",
 )
-
-_LoaderFunc = collections.abc.Callable[[str, str | None], None] | None
 
 
 def import_module(name: str, package: str | None = None) -> None:
