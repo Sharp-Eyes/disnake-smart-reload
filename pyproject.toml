@@ -19,6 +19,7 @@ disnake = "^2.9.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.3"
+pre-commit = "^3.8.0"
 
 [tool.pyright]
 typeCheckingMode = "strict"
