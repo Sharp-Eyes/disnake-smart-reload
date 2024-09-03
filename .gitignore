@@ -4,6 +4,7 @@ __pycache__
 *.egg-info/
 poetry.lock
 .env
+.venv
 
 test.py
 *.ipynb
