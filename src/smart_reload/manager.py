@@ -12,7 +12,11 @@ if typing.TYPE_CHECKING:
 
     from smart_reload import node as node_m
 
-    _LoaderFunc = collections.abc.Callable[[str, str | None], None] | None
+    _LoaderFunc = collections.abc.Callable[
+        [str, str | None],
+        collections.abc.Coroutine[typing.Any, typing.Any, None] | None,
+    ]
+    _LoaderFuncT = typing.TypeVar("_LoaderFuncT", _LoaderFunc, None)
 
 __all__: collections.abc.Sequence[str] = (
     "ReloadManager",
@@ -43,35 +47,37 @@ class ReloadManager:
     def __init__(self) -> None:
         self._modules = {}
 
-        self._load = import_module
-        self._unload = unload_module
+        self._load: _LoaderFunc = import_module
+        self._unload: _LoaderFunc = unload_module
 
     @property
     def modules(self) -> collections.abc.Mapping[str, node_m.ModuleNode]:
         """The modules registered to this manager."""
         return self._modules
 
-    def set_loader(self, loader: _LoaderFunc) -> _LoaderFunc:
+    def set_loader(self, loader: _LoaderFuncT) -> _LoaderFuncT:
         """Register a custom loader function.
 
         If ``None`` is passed, the loader function is reset to the default
         implementation.
         """
         if not loader:
-            self._load = import_module
+            self._load = import_module  # noqa: RET503
         else:
             self._load = loader
+            return loader
 
-    def set_unloader(self, unloader: _LoaderFunc) -> _LoaderFunc:
+    def set_unloader(self, unloader: _LoaderFuncT) -> _LoaderFuncT:
         """Register a custom unloader function.
 
         If ``None`` is passed, the unloader function is reset to the default
         implementation.
         """
         if not unloader:
-            self._load = unload_module
+            self._load = unload_module  # noqa: RET503
         else:
             self._load = unloader
+            return unloader
 
     def load_module(self, name: str, package: str | None = None) -> typing.NoReturn:
         """Load a module.
