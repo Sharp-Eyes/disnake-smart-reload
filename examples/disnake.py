@@ -20,7 +20,12 @@ def unload_extension(name: str, package: str | None) -> None:
         smart_reload.unload_module(name, package)
 
 
-manager.set_loader(lambda name, package: bot.load_extension(name, package=package))
+def load_extension(name: str, package: str | None) -> None:
+    """Disnake compatibility layer for load_module."""
+    bot.load_extension(name, package=package)
+
+
+manager.set_loader(load_extension)
 manager.set_unloader(unload_extension)
 
 

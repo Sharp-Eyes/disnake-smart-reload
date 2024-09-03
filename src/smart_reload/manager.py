@@ -12,11 +12,8 @@ if typing.TYPE_CHECKING:
 
     from smart_reload import node as node_m
 
-    _LoaderFunc = collections.abc.Callable[
-        [str, str | None],
-        collections.abc.Coroutine[typing.Any, typing.Any, None] | None,
-    ]
-    _LoaderFuncT = typing.TypeVar("_LoaderFuncT", _LoaderFunc, None)
+    _LoaderFunc = collections.abc.Callable[[str, str | None], None]
+    _LoaderFuncT = typing.TypeVar("_LoaderFuncT", bound=_LoaderFunc | None)
 
 __all__: collections.abc.Sequence[str] = (
     "ReloadManager",
@@ -61,11 +58,13 @@ class ReloadManager:
         If ``None`` is passed, the loader function is reset to the default
         implementation.
         """
-        if not loader:
-            self._load = import_module  # noqa: RET503
+        if loader is None:
+            self._load = import_module
         else:
             self._load = loader
             return loader
+
+        return loader
 
     def set_unloader(self, unloader: _LoaderFuncT) -> _LoaderFuncT:
         """Register a custom unloader function.
@@ -73,11 +72,12 @@ class ReloadManager:
         If ``None`` is passed, the unloader function is reset to the default
         implementation.
         """
-        if not unloader:
-            self._load = unload_module  # noqa: RET503
+        if unloader is None:
+            self._unload = unload_module
         else:
-            self._load = unloader
-            return unloader
+            self._unload = unloader
+
+        return unloader
 
     def load_module(self, name: str, package: str | None = None) -> typing.NoReturn:
         """Load a module.
@@ -94,7 +94,7 @@ class ReloadManager:
 
         Automatically reloads all child modules.
         """
-        self._unload(name, package=package)
+        self._unload(name, package)
 
         # Unload all dependencies in reverse order...
         node = self._modules[name]
@@ -110,7 +110,7 @@ class ReloadManager:
 
         Automatically unloads all child modules that are safe to unload.
         """
-        self._unload(name, package=package)
+        self._unload(name, package)
 
         node = self.modules[name]
         for dependency, _ in node.walk_dependencies():
