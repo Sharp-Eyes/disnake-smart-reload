@@ -1,10 +1,11 @@
-from smart_reload import ModuleNode, ReloadManager
+import typing
 
+from smart_reload import ModuleNode, ReloadManager
 
 manager = ReloadManager()
 
 
-def display_order(order: list[set[ModuleNode]]):
+def display_order(order: typing.Iterable[typing.Iterable[ModuleNode]]) -> None:
     print([[node.name for node in dependencies] for dependencies in order])
 
 

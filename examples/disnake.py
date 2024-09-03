@@ -1,12 +1,19 @@
-from disnake.ext import commands
-import smart_reload
+"""Example on how to integrate <name pending> with disnake.
 
+Similar logic can be applied to other discord.py forks.
+"""
+from __future__ import annotations
+
+from disnake.ext import commands
+
+import smart_reload
 
 bot = commands.Bot()
 manager = smart_reload.ReloadManager()
 
 
-def unload_extension(name: str, package: str | None):
+def unload_extension(name: str, package: str | None) -> None:
+    """Disnake compatibility layer for unload_module."""
     try:
         bot.unload_extension(name, package=package)
     except commands.ExtensionNotFound:
