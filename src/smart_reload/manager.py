@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-import inspect
 import pathlib
 import sys
 import typing
@@ -93,40 +92,48 @@ class ReloadManager:
         except ImportError as e:
             raise RuntimeError(f"Couldn't find {name}") from e  # noqa: TRY003, EM102
 
-        module_spec = importlib.util.find_spec(resolved_name)
+        try:
+            module_spec = importlib.util.find_spec(resolved_name)
+        except ModuleNotFoundError:
+            # couldn't load spec for this module
+            return
 
-        if not module_spec:
-            # skip the module if it's not in sys.modules
+        if not module_spec or not module_spec.origin or not module_spec.parent:
+            # incomplete module spec :(
+            # maybe we could try to get info in some other manner?
             return  # noqa: RET502
 
-        module = importlib.util.module_from_spec(module_spec)
         try:
-            data = self._parser.parse_module(module)
+            data = self._parser.parse_module(module_spec.origin)
         except TypeError:
             # skipping by default, this module is in the stdlib!
             return  # noqa: RET502
 
         imported_modules = self._parser.get_imports_from_module(
-            module.__package__,
+            module_spec.parent,
             data,
         )
-        module_path = inspect.getsourcefile(module) or ""
 
         # this is not a module that we should listen for
-        if self.path.resolve() not in pathlib.Path(module_path).resolve().parents:
-            raise
+        parents = [
+            p.resolve() for p in pathlib.Path(module_spec.origin).resolve().parents
+        ]
+        if self.path.resolve() not in parents:
+            raise ValueError
 
-        node = node_m.ModuleNode(module_path, name=name, package=package)
+        node = node_m.ModuleNode(module_spec.origin, name=name, package=package)
 
         for module_ in imported_modules.copy():
+            print(imported_modules)
             try:
                 node_module = self._build_module_nodes(module_)
-            except Exception:  # noqa: BLE001
+            except ValueError:  # noqa: BLE001
                 imported_modules.remove(module_)
                 continue
 
             if node_module:
                 node.add_dependency(node_module)
+                print(node_module, node_module.dependents)
             else:
                 imported_modules.remove(module_)
         return node
