@@ -106,7 +106,10 @@ class ReloadManager:
             # skipping by default, this module is in the stdlib!
             return  # noqa: RET502
 
-        imported_modules = self._parser.get_imports_from_module(data)
+        imported_modules = self._parser.get_imports_from_module(
+            module.__package__,
+            data,
+        )
         module_path = inspect.getsourcefile(module) or ""
 
         # this is not a module that we should listen for

@@ -64,9 +64,9 @@ class ModuleNode:
         dependent._dependencies.add(self)
 
     def add_dependency(self, dependency: ModuleNode) -> None:
-        """Add a dependent to this module.
+        """Add a dependency to this module.
 
-        Automatically adds this module as a dependency to the other module.
+        Automatically adds this module as a dependents to the other module.
         """
         self._dependencies.add(dependency)
         dependency._dependents.add(self)
