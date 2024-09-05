@@ -65,20 +65,21 @@ class ModuleVisitor(ast.NodeVisitor):
         self.package: str | None = package
         self.imported_modules: set[str] = set()
 
-    def _resolve_relative_package(self, name: str, level: int) -> str:
-        return importlib._bootstrap._resolve_name(  # type: ignore
-            name,
-            package=self.package,
-            level=level,
-        )
-
     def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            resolved = resolve_name(None, alias.name, self.package, 0)
+            if resolved in sys.modules:
+                self.imported_modules.add(resolved)
         for alias in node.names:
             resolved = resolve_name(None, alias.name, self.package, 0)
             if resolved in sys.modules:
                 self.imported_modules.add(resolved)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if node.module:
+            resolved = resolve_name(None, node.module, self.package, node.level)
+            if resolved in sys.modules:
+                self.imported_modules.add(resolved)
         if node.module:
             resolved = resolve_name(None, node.module, self.package, node.level)
             if resolved in sys.modules:
