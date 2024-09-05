@@ -17,7 +17,7 @@ def resolve_name(
     """Resolve parts of an import statement to an absolute import."""
     fullname = f"{module}.{name}" if module else name
 
-    if not package:
+    if not package or not level:
         if not fullname.startswith("."):
             # TODO: remove after testing or maybe log instead?
             print(f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {fullname!r}")
