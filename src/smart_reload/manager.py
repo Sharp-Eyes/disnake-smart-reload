@@ -82,20 +82,13 @@ class ReloadManager:
 
         return unloader
 
-    def _resolve_name(self, name: str, package: str | None = None) -> str:
-        try:
-            resolved_name = importlib.util.resolve_name(name, package)
-        except ImportError as e:
-            raise RuntimeError(f"Couldn't find {name}") from e  # noqa: TRY003, EM102
-        return resolved_name
-
     def _build_module_nodes(
         self,
         name: str,
         package: str | None = None,
     ) -> node_m.ModuleNode | None:
         is_maybe_package: bool = False
-        resolved_name = self._resolve_name(name, package)
+        resolved_name = parser.resolve_name(None, name, package, None)
 
         try:
             module_spec = importlib.util.find_spec(resolved_name)
@@ -169,13 +162,13 @@ class ReloadManager:
             return
 
         self._modules[_node.name] = _node
-        
+
     def reload_module(self, name: str, *, package: str | None = None) -> None:
         """Reload a module.
 
         Automatically reloads all child modules.
         """
-        resolved_name = self._resolve_name(name, package)
+        resolved_name = parser.resolve_name(None, name, package, None)
         node = self._modules[resolved_name]
         top_level: set[node_m.ModuleNode] = set()
 
@@ -196,7 +189,7 @@ class ReloadManager:
         Automatically unloads all child modules that are safe to unload.
         """
         self._unload(name, package)
-        resolved_name = self._resolve_name(name, package)
+        resolved_name = parser.resolve_name(None, name, package, None)
 
         node = self.modules[resolved_name]
         for dependency, _ in node.walk_dependencies():
