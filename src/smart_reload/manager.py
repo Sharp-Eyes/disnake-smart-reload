@@ -154,7 +154,6 @@ class ReloadManager:
 
             if node_module:
                 node.add_dependency(node_module)
-                print(node, node_module, node_module.dependents)
             else:
                 imported_modules.remove(module_)
         return node
