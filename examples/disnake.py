@@ -16,7 +16,10 @@ def unload_extension(name: str, package: str | None) -> None:
     """Disnake compatibility layer for unload_module."""
     try:
         bot.unload_extension(name, package=package)
-    except commands.ExtensionNotFound:
+    except commands.ExtensionNotLoaded:
+        # You didn't load this extension manually
+        # aka it's NOT an extension! Use the default function
+        # to un-import the module 
         smart_reload.unload_module(name, package)
 
 
