@@ -117,7 +117,7 @@ class ReloadManager:
             return
 
         try:
-            data = parser.parse_module(origin, is_maybe_package)
+            data = parser.parse_module(origin, is_package=is_maybe_package)
         except TypeError:
             # skipping by default, this module is in the stdlib!
             return  # noqa: RET502
@@ -148,7 +148,7 @@ class ReloadManager:
         for module_ in imported_modules.copy():
             try:
                 node_module = self._build_module_nodes(module_)
-            except ValueError:  # noqa: BLE001
+            except ValueError:  # TODO: change this error to another that makes sense
                 imported_modules.remove(module_)
                 continue
 

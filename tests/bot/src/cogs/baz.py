@@ -1,1 +1,1 @@
-from src.cogs import baz # yeah ik weird import
+from src.cogs import baz  # yeah ik weird import

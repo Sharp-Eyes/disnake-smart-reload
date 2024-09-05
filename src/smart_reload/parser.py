@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import ast
-import importlib
-import importlib._bootstrap
-import importlib.util
 import pathlib
 import sys
 
 
-def parse_module(path: str, is_package: bool) -> ast.Module | None:
-    """Parse a module given its path, returning an ast object
+def parse_module(path: str, *, is_package: bool) -> ast.Module | None:
+    """
+    Parse a module given its path, returning an ast object
     representing its source.
     """
     if is_package:
@@ -20,7 +18,7 @@ def parse_module(path: str, is_package: bool) -> ast.Module | None:
 
         path = path_.name
 
-    with open(path, "r") as module_file:
+    with open(path) as module_file:
         module = ast.parse(module_file.read(), filename="<string>")
     return module
 
@@ -38,7 +36,7 @@ def resolve_name(
         if not fullname.startswith("."):
             # TODO: remove after testing or maybe log instead?
             print(
-                f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {fullname!r}"
+                f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {fullname!r}",
             )
             return fullname
 
@@ -65,21 +63,13 @@ class ModuleVisitor(ast.NodeVisitor):
         self.package: str | None = package
         self.imported_modules: set[str] = set()
 
-    def visit_Import(self, node: ast.Import) -> None:
-        for alias in node.names:
-            resolved = resolve_name(None, alias.name, self.package, 0)
-            if resolved in sys.modules:
-                self.imported_modules.add(resolved)
+    def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
         for alias in node.names:
             resolved = resolve_name(None, alias.name, self.package, 0)
             if resolved in sys.modules:
                 self.imported_modules.add(resolved)
 
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if node.module:
-            resolved = resolve_name(None, node.module, self.package, node.level)
-            if resolved in sys.modules:
-                self.imported_modules.add(resolved)
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
         if node.module:
             resolved = resolve_name(None, node.module, self.package, node.level)
             if resolved in sys.modules:
