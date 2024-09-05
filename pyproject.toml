@@ -66,7 +66,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["T201", "D", "F401"]
+"tests/*" = ["T201", "D", "F401", "TID252", "I001"]
 "__init__.py" = ["F403"]
 
 [tool.ruff.lint.isort]

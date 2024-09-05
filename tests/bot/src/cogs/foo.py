@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from disnake.ext import commands
-
+from . import bar
+from ..utils import useful_file
 
 class Test(commands.Cog):
     ...
