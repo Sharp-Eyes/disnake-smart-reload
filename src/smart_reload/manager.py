@@ -82,17 +82,20 @@ class ReloadManager:
 
         return unloader
 
+    def _resolve_name(self, name: str, package: str | None = None) -> str:
+        try:
+            resolved_name = importlib.util.resolve_name(name, package)
+        except ImportError as e:
+            raise RuntimeError(f"Couldn't find {name}") from e  # noqa: TRY003, EM102
+        return resolved_name
+
     def _build_module_nodes(
         self,
         name: str,
         package: str | None = None,
     ) -> node_m.ModuleNode | None:
         is_maybe_package: bool = False
-
-        try:
-            resolved_name = importlib.util.resolve_name(name, package)
-        except ImportError as e:
-            raise RuntimeError(f"Couldn't find {name}") from e  # noqa: TRY003, EM102
+        resolved_name = self._resolve_name(name, package)
 
         try:
             module_spec = importlib.util.find_spec(resolved_name)
@@ -126,11 +129,6 @@ class ReloadManager:
             # namespace package, ignore it
             return
 
-        """        imported_modules = self._parser.get_imports_from_module(
-            module_spec.parent,
-            data,
-        )"""
-
         # this is not a module that we should listen for
         parents = [p.resolve() for p in pathlib.Path(origin).resolve().parents]
         if self.path.resolve() not in parents:
@@ -158,40 +156,49 @@ class ReloadManager:
                 imported_modules.remove(module_)
         return node
 
-    def load_module(self, name: str, package: str | None = None) -> typing.NoReturn:
+    def load_module(self, name: str, package: str | None = None) -> None:
         """Load a module.
 
         Automatically registers all child modules for use in reloading.
         """
         self._load(name, package)
         _node = self._build_module_nodes(name, package)
-        # Make ModuleNodes for the imported module
-        raise NotImplementedError
 
-    def reload_module(self, name: str, *, package: str) -> None:
+        if not _node:
+            # maybe we should raise an error or a warning?
+            return
+
+        self._modules[_node.name] = _node
+        
+    def reload_module(self, name: str, *, package: str | None = None) -> None:
         """Reload a module.
 
         Automatically reloads all child modules.
         """
-        self._unload(name, package)
+        resolved_name = self._resolve_name(name, package)
+        node = self._modules[resolved_name]
+        top_level: set[node_m.ModuleNode] = set()
 
         # Unload all dependencies in reverse order...
-        node = self._modules[name]
         for dependencies in self.find_dependency_order(node):
             for dependency in dependencies:
                 self._unload(dependency.name, dependency.package)
+                if not dependency.dependents:
+                    top_level.add(dependency)
 
-        # Load the main extension again (automatically imports what it needs).
-        self.load_module(name, package=package)
+        for dependency in top_level:
+            # Load the main extension again and related modules (automatically imports what it needs).
+            self.load_module(dependency.name, dependency.package)
 
-    def unload_module(self, name: str, package: str | None) -> None:
+    def unload_module(self, name: str, package: str | None = None) -> None:
         """Unload a module.
 
         Automatically unloads all child modules that are safe to unload.
         """
         self._unload(name, package)
+        resolved_name = self._resolve_name(name, package)
 
-        node = self.modules[name]
+        node = self.modules[resolved_name]
         for dependency, _ in node.walk_dependencies():
             if not dependency.dependents:  # Safe to unload too
                 self._unload(name, package)
