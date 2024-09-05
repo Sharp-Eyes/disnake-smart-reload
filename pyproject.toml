@@ -22,6 +22,9 @@ ruff = "^0.6.3"
 pre-commit = "^3.8.0"
 pyright = "^1.1.378"
 
+[tool.poetry.group.test.dependencies]
+pytest = "^8.3.2"
+
 [tool.isort]
 profile = "black"
 
@@ -71,3 +74,6 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-third-party = ["smart_reload"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
