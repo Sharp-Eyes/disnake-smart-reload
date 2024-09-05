@@ -45,7 +45,7 @@ def resolve_name(
         raise RuntimeError
 
     base, *remainder = package.rsplit(".", level - 1)
-    if len(remainder) == level:
+    if len(remainder) < level - 1:
         print(module, name, package)
         # Should essentially never happen as the modules passed actual importing;
         # attempted relative import beyond top-level package
