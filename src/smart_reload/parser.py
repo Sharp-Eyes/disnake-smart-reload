@@ -4,23 +4,64 @@ import ast
 import importlib
 import importlib._bootstrap
 import importlib.util
+import pathlib
 import sys
-import types
 
 
-def parse_module(path: str) -> ast.Module:
+def parse_module(path: str, is_package: bool) -> ast.Module | None:
     """Parse a module given its path, returning an ast object
     representing its source.
     """
+    if is_package:
+        path_ = (pathlib.Path(path) / "__init__.py").resolve()
+        if not path_.exists():
+            print("UwU")
+            return
+
+        path = path_.name
+
     with open(path, "r") as module_file:
         module = ast.parse(module_file.read(), filename="<string>")
     return module
 
 
+def resolve_name(
+    module: str | None,
+    name: str,
+    package: str | None,
+    level: int,
+) -> str:
+    """Resolve parts of an import statement to an absolute import."""
+    fullname = f"{module}.{name}" if module else name
+
+    if not package:
+        if not fullname.startswith("."):
+            # TODO: remove after testing or maybe log instead?
+            print(
+                f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {fullname!r}"
+            )
+            return fullname
+
+        # Should essentially never happen as the modules passed actual importing;
+        # no package specified for relative import
+        raise RuntimeError
+
+    base, *remainder = package.rsplit(".", level - 1)
+    if len(remainder) == level:
+        print(module, name, package)
+        # Should essentially never happen as the modules passed actual importing;
+        # attempted relative import beyond top-level package
+        raise RuntimeError
+
+    resolved = f"{base}.{fullname}" if name else base
+    # TODO: remove after testing or maybe log instead?
+    print(f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {resolved!r}.")
+    return resolved
+
+
 class ModuleVisitor(ast.NodeVisitor):
-    def __init__(self, name: str, package: str | None) -> None:
+    def __init__(self, package: str | None) -> None:
         super().__init__()
-        self.module_name: str = name
         self.package: str | None = package
         self.imported_modules: set[str] = set()
 
@@ -32,85 +73,18 @@ class ModuleVisitor(ast.NodeVisitor):
         )
 
     def visit_Import(self, node: ast.Import) -> None:
-        for import_name in node.names:
-            self.imported_modules.add(import_name.name)
+        for alias in node.names:
+            resolved = resolve_name(None, alias.name, self.package, 0)
+            if resolved in sys.modules:
+                self.imported_modules.add(resolved)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        if node.level:
-            # relative import
-            # e.g from .Y import X, etc...
-            for alias in node.names:
-                if node.module:
-                    name = node.module + "." + alias.name
-                else:
-                    name = alias.name
+        if node.module:
+            resolved = resolve_name(None, node.module, self.package, node.level)
+            if resolved in sys.modules:
+                self.imported_modules.add(resolved)
 
-                if self.package:
-                    self.imported_modules.add(
-                        self._resolve_relative_package(name, node.level)
-                    )
-                else:
-                    self.imported_modules.add(name)
-        else:
-            # non-relative import
-            # e.g from Y import X, etc...
-            if not node.module:
-                # should never happen
-                return
-
-            for alias in node.names:
-                if not alias.asname:
-                    continue
-                if isinstance(
-                    sys.modules[node.module].__dict__[alias.asname], types.ModuleType
-                ):
-                    self.imported_modules.add(node.module + "." + alias.asname)
-            self.imported_modules.add(node.module)
-
-
-class Parser:
-    def parse_module(self, path: str) -> ast.Module:
-        """Parse a module given its path, returning an ast object
-        representing its source.
-        """
-        with open(path, "r") as module_file:
-            module = ast.parse(module_file.read(), filename="<string>")
-        return module
-
-    def get_imports_from_module(self, package: str, module: ast.Module) -> set[str]:
-        imported_modules: set[str] = set()
-        for element in module.body:
-            if not isinstance(element, (ast.Import, ast.ImportFrom)):
-                continue
-
-            if (
-                isinstance(element, ast.Import)
-                or not element.module
-                and not element.level
-            ):
-                for name in element.names:
-                    imported_modules.add(name.name)  # noqa: PERF401
-            else:  # noqa: PLR5501
-                # alarm: relative import, add package
-                if element.level != 0:
-                    for alias in element.names:
-                        if element.module:
-                            name = element.module + "." + alias.name
-                        else:
-                            name = alias.name
-
-                        imported_modules.add(
-                            importlib._bootstrap._resolve_name(  # type: ignore
-                                name,
-                                package=package,
-                                level=element.level,
-                            )
-                        )
-                else:
-                    for alias in element.names:
-                        if element.module:
-                            name = element.module + "." + alias.name
-                        else:
-                            name = alias.name
-                        imported_modules.add(name)
-        return imported_modules
+        for alias in node.names:
+            resolved = resolve_name(node.module, alias.name, self.package, node.level)
+            if resolved in sys.modules:
+                self.imported_modules.add(resolved)

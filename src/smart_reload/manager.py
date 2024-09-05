@@ -43,10 +43,10 @@ class ReloadManager:
 
     _modules: dict[str, node_m.ModuleNode]
 
-    def __init__(self, path: str | None) -> None:
+    def __init__(self, path: str | None = None) -> None:
         self.path = pathlib.Path(path) if path else pathlib.Path()
-        self._parser = parser.Parser()
         self._modules = {}
+        self._resolved_modules: set[str] = set()
 
         self._load: _LoaderFunc = import_module
         self._unload: _LoaderFunc = unload_module
@@ -87,6 +87,8 @@ class ReloadManager:
         name: str,
         package: str | None = None,
     ) -> node_m.ModuleNode | None:
+        is_maybe_package: bool = False
+
         try:
             resolved_name = importlib.util.resolve_name(name, package)
         except ImportError as e:
@@ -98,33 +100,52 @@ class ReloadManager:
             # couldn't load spec for this module
             return
 
-        if not module_spec or not module_spec.origin or not module_spec.parent:
+        if not module_spec or not module_spec.parent:
             # incomplete module spec :(
             # maybe we could try to get info in some other manner?
             return  # noqa: RET502
 
+        if module_spec.origin is not None:
+            origin = module_spec.origin
+        elif module_spec.submodule_search_locations is not None:
+            # this is a package
+            origin = module_spec.submodule_search_locations[0]
+            is_maybe_package = True
+        else:
+            # should never happen? both module_spec.origin and
+            # module_spec.submodule_search_locations were None
+            return
+
         try:
-            data = self._parser.parse_module(module_spec.origin)
+            data = parser.parse_module(origin, is_maybe_package)
         except TypeError:
             # skipping by default, this module is in the stdlib!
             return  # noqa: RET502
 
-        imported_modules = self._parser.get_imports_from_module(
+        if not data:
+            # namespace package, ignore it
+            return
+
+        """        imported_modules = self._parser.get_imports_from_module(
             module_spec.parent,
             data,
-        )
+        )"""
 
         # this is not a module that we should listen for
-        parents = [
-            p.resolve() for p in pathlib.Path(module_spec.origin).resolve().parents
-        ]
+        parents = [p.resolve() for p in pathlib.Path(origin).resolve().parents]
         if self.path.resolve() not in parents:
             raise ValueError
 
-        node = node_m.ModuleNode(module_spec.origin, name=name, package=package)
+        node_visitor = parser.ModuleVisitor(module_spec.parent)
+        node_visitor.visit(data)
+        imported_modules = node_visitor.imported_modules
+        if self._resolved_modules.intersection(imported_modules):
+            return
+
+        self._resolved_modules = self._resolved_modules.union(imported_modules)
+        node = node_m.ModuleNode(origin, name=name, package=package)
 
         for module_ in imported_modules.copy():
-            print(imported_modules)
             try:
                 node_module = self._build_module_nodes(module_)
             except ValueError:  # noqa: BLE001
@@ -133,7 +154,7 @@ class ReloadManager:
 
             if node_module:
                 node.add_dependency(node_module)
-                print(node_module, node_module.dependents)
+                print(node, node_module, node_module.dependents)
             else:
                 imported_modules.remove(module_)
         return node
