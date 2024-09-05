@@ -33,7 +33,7 @@ def resolve_name(
     fullname = f"{module}.{name}" if module else name
 
     if not package:
-        if not fullname.startswith("."):
+        if not fullname.startswith(".") and not level:
             # TODO: remove after testing or maybe log instead?
             print(
                 f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {fullname!r}",
@@ -41,15 +41,14 @@ def resolve_name(
             return fullname
 
         # Should essentially never happen as the modules passed actual importing;
-        # no package specified for relative import
-        raise RuntimeError
+        msg = "No package specified for relative import."
+        raise RuntimeError(msg)
 
     base, *remainder = package.rsplit(".", level - 1)
     if len(remainder) < level - 1:
-        print(module, name, package)
         # Should essentially never happen as the modules passed actual importing;
-        # attempted relative import beyond top-level package
-        raise RuntimeError
+        msg = "Attempted relative import beyond top-level package."
+        raise RuntimeError(msg)
 
     resolved = f"{base}.{fullname}" if name else base
     # TODO: remove after testing or maybe log instead?
