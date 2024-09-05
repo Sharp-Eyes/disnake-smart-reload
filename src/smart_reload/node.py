@@ -49,7 +49,7 @@ class ModuleNode:
 
         That is, files imported by this module.
         """
-        return self.dependencies
+        return self._dependencies
 
     def __hash__(self) -> int:
         # Probably unique enough?
