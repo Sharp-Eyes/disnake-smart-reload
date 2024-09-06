@@ -85,31 +85,24 @@ class ReloadManager:
 
         return unloader
 
-    def _resolve_name(self, name: str, package: str | None = None) -> str:
-        try:
-            resolved_name = importlib.util.resolve_name(name, package)
-        except ImportError as e:
-            raise RuntimeError(f"Couldn't find {name}") from e  # noqa: TRY003, EM102
-        return resolved_name
-
     def _build_module_nodes(
         self,
         name: str,
         package: str | None = None,
     ) -> node_m.ModuleNode | None:
         is_maybe_package: bool = False
-        resolved_name = self._resolve_name(name, package)
+        resolved_name = parser.resolve_name(name, package)
 
         try:
             module_spec = importlib.util.find_spec(resolved_name)
         except ModuleNotFoundError:
             # couldn't load spec for this module
-            return
+            return None
 
         if not module_spec or not module_spec.parent:
             # incomplete module spec :(
             # maybe we could try to get info in some other manner?
-            return  # noqa: RET502
+            return None
 
         if module_spec.origin is not None:
             origin = module_spec.origin
@@ -120,17 +113,17 @@ class ReloadManager:
         else:
             # should never happen? both module_spec.origin and
             # module_spec.submodule_search_locations were None
-            return
+            return None
 
         try:
             data = parser.parse_module(origin, is_package=is_maybe_package)
         except TypeError:
             # skipping by default, this module is in the stdlib!
-            return  # noqa: RET502
+            return None
 
         if not data:
             # namespace package, ignore it
-            return
+            return None
 
         # this is not a module that we should listen for
         parents = [p.resolve() for p in pathlib.Path(origin).resolve().parents]
@@ -141,7 +134,7 @@ class ReloadManager:
         node_visitor.visit(data)
         imported_modules = node_visitor.imported_modules
         if self._resolved_modules.intersection(imported_modules):
-            return
+            return None
 
         self._resolved_modules = self._resolved_modules.union(imported_modules)
         node = node_m.ModuleNode(origin, name=name, package=package)
@@ -179,7 +172,7 @@ class ReloadManager:
 
         Automatically reloads all child modules.
         """
-        resolved_name = self._resolve_name(name, package)
+        resolved_name = parser.resolve_name(name, package)
         node = self._modules[resolved_name]
         top_level: set[node_m.ModuleNode] = set()
 
@@ -203,7 +196,7 @@ class ReloadManager:
         Automatically unloads all child modules that are safe to unload.
         """
         self._unload(name, package)
-        resolved_name = self._resolve_name(name, package)
+        resolved_name = parser.resolve_name(name, package)
 
         node = self.modules[resolved_name]
         for dependency, _ in node.walk_dependencies():

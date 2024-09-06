@@ -74,7 +74,7 @@ class TestResolveName:
         package = None
         level = 0
 
-        resolved = parser.resolve_name(module, name, package, level)
+        resolved = parser.resolve_name(name, package, module=module, level=level)
         assert resolved == expected
 
     @pytest.mark.parametrize(
@@ -100,7 +100,7 @@ class TestResolveName:
         name = element.names[0].name
         level = element.level
 
-        resolved = parser.resolve_name(module, name, package, level)
+        resolved = parser.resolve_name(name, package, module=module, level=level)
         assert resolved == expected
 
     def test_resolve_name_fail_relative_no_package(self) -> None:
@@ -108,7 +108,7 @@ class TestResolveName:
             RuntimeError,
             match="No package specified for relative import.",
         ):
-            parser.resolve_name(None, ".a", None, 0)
+            parser.resolve_name("a", None, level=1)
 
     def test_resolve_name_fail_relative_too_deep(self) -> None:
         # Equivalent to `from ... import a` in A.B.b (package A.B).
@@ -116,7 +116,7 @@ class TestResolveName:
             RuntimeError,
             match="Attempted relative import beyond top-level package",
         ):
-            print(parser.resolve_name(None, "a", "A.B", 3))
+            print(parser.resolve_name("a", "A.B", level=3))
 
 
 class TestModuleVisitor:
@@ -189,6 +189,17 @@ class TestModuleVisitor:
             mock_modules({"A.a", "A.B.b", "A.B.C.c"}) as modules,
             mock_package(visitor, package),
         ):
+            visitor.visit(ast.parse(body))
+
+            assert visitor.imported_modules == modules
+
+    @pytest.mark.parametrize("body", ["import A.a as foo", "from A import a as foo"])
+    def test_visit_import_aliased(
+        self,
+        visitor: parser.ModuleVisitor,
+        body: str,
+    ) -> None:
+        with mock_modules({"A.a"}) as modules:
             visitor.visit(ast.parse(body))
 
             assert visitor.imported_modules == modules

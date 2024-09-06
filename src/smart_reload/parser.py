@@ -24,16 +24,26 @@ def parse_module(path: str, *, is_package: bool) -> ast.Module | None:
 
 
 def resolve_name(
-    module: str | None,
     name: str,
     package: str | None,
-    level: int,
+    *,
+    module: str | None = None,
+    level: int | None = None,
 ) -> str:
     """Resolve parts of an import statement to an absolute import."""
     fullname = f"{module}.{name}" if module else name
 
+    if level is None:
+        level = 0
+        for char in fullname:
+            if char != ".":
+                break
+            level += 1
+
+        fullname = fullname[level:]
+
     if not package:
-        if not fullname.startswith(".") and not level:
+        if not fullname.startswith(".") and level == 0:
             # TODO: remove after testing or maybe log instead?
             print(
                 f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {fullname!r}",
@@ -64,17 +74,24 @@ class ModuleVisitor(ast.NodeVisitor):
 
     def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
         for alias in node.names:
-            resolved = resolve_name(None, alias.name, self.package, 0)
+            resolved = resolve_name(alias.name, self.package, level=0)
             if resolved in sys.modules:
                 self.imported_modules.add(resolved)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
         if node.module:
-            resolved = resolve_name(None, node.module, self.package, node.level)
+            # Check if the module itself can be resolved.
+            resolved = resolve_name(node.module, self.package, level=node.level)
             if resolved in sys.modules:
                 self.imported_modules.add(resolved)
 
         for alias in node.names:
-            resolved = resolve_name(node.module, alias.name, self.package, node.level)
+            # Check if any of the imports can be resolved.
+            resolved = resolve_name(
+                alias.name,
+                self.package,
+                module=node.module,
+                level=node.level,
+            )
             if resolved in sys.modules:
                 self.imported_modules.add(resolved)
