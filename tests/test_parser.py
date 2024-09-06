@@ -193,6 +193,17 @@ class TestModuleVisitor:
 
             assert visitor.imported_modules == modules
 
+    @pytest.mark.parametrize("body", ["import A.a as foo", "from A import a as foo"])
+    def test_visit_import_aliased(
+        self,
+        visitor: parser.ModuleVisitor,
+        body: str,
+    ) -> None:
+        with mock_modules({"A.a"}) as modules:
+            visitor.visit(ast.parse(body))
+
+            assert visitor.imported_modules == modules
+
     def test_visit_import_relative_no_package(
         self,
         visitor: parser.ModuleVisitor,
