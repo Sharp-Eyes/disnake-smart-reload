@@ -16,19 +16,21 @@ _ModulesT = typing.TypeVar("_ModulesT", bound=typing.Collection[str])
 def mock_modules(modules: _ModulesT) -> typing.Generator[_ModulesT]:
     # Take a sequence of module names and temporarily add them to sys.modules.
     # To be safe, raise if the module name already exists.
-    for module in modules:
-        if module in sys.modules:
-            msg = "Cannot safely mock already existing module."
-            raise RuntimeError(msg)
+    try:
+        for module in modules:
+            if module in sys.modules:
+                msg = "Cannot safely mock already existing module."
+                raise RuntimeError(msg)
 
-        sys.modules[module] = types.ModuleType(module, None)
+            sys.modules[module] = types.ModuleType(module, None)
 
-    # Yield the sequence to the test function.
-    yield modules
+        # Yield the sequence to the test function.
+        yield modules
 
-    # Clear the modules from sys.modules after the test function finishes.
-    for module in modules:
-        del sys.modules[module]
+    finally:
+        # Clear the modules from sys.modules after the test function finishes.
+        for module in modules:
+            sys.modules.pop(module, None)
 
 
 @contextlib.contextmanager
@@ -80,6 +82,7 @@ class TestResolveName:
     @pytest.mark.parametrize(
         ("stmt", "package", "expected"),
         [
+            ("from . import a", "A", "A.a"),
             ("from .B import b", "A", "A.B.b"),
             ("from .. import a", "A.B", "A.a"),
             ("from .C import c", "A.B", "A.B.C.c"),
@@ -186,7 +189,7 @@ class TestModuleVisitor:
         body: str,
     ) -> None:
         with (
-            mock_modules({"A.a", "A.B.b", "A.B.C.c"}) as modules,
+            mock_modules({"A", "A.a", "A.B", "A.B.b", "A.B.C", "A.B.C.c"}) as modules,
             mock_package(visitor, package),
         ):
             visitor.visit(ast.parse(body))

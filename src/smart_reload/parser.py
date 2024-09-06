@@ -80,8 +80,16 @@ class ModuleVisitor(ast.NodeVisitor):
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
         if node.module:
-            # Check if the module itself can be resolved.
+            # From-import with a module specified:
+            # check if the module itself can be resolved.
             resolved = resolve_name(node.module, self.package, level=node.level)
+            if resolved in sys.modules:
+                self.imported_modules.add(resolved)
+
+        elif self.package:
+            # Relative from-import where the module is any number of ``.``s:
+            # try resolving the package as a module.
+            resolved = resolve_name("", self.package, level=node.level-1)
             if resolved in sys.modules:
                 self.imported_modules.add(resolved)
 
