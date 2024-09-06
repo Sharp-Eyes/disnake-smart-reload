@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import signal
 import importlib
 import importlib.util
 import pathlib
@@ -10,6 +11,7 @@ import typing
 
 from smart_reload import node as node_m
 from smart_reload import parser
+from smart_reload import watchdog
 
 if typing.TYPE_CHECKING:
     import collections.abc
@@ -43,8 +45,9 @@ class ReloadManager:
 
     _modules: dict[str, node_m.ModuleNode]
 
-    def __init__(self, path: str | None = None) -> None:
+    def __init__(self, path: str | None = None, interval: float = 1) -> None:
         self.path = pathlib.Path(path) if path else pathlib.Path()
+        self._file_watchdog = watchdog.SyncWatchdog(self, interval)
         self._modules = {}
         self._resolved_modules: set[str] = set()
 
@@ -152,6 +155,7 @@ class ReloadManager:
 
             if node_module:
                 node.add_dependency(node_module)
+                self._modules[node_module.name] = node_module
             else:
                 imported_modules.remove(module_)
         return node
@@ -169,7 +173,7 @@ class ReloadManager:
             return
 
         self._modules[_node.name] = _node
-        
+
     def reload_module(self, name: str, *, package: str | None = None) -> None:
         """Reload a module.
 
@@ -180,15 +184,18 @@ class ReloadManager:
         top_level: set[node_m.ModuleNode] = set()
 
         # Unload all dependencies in reverse order...
-        for dependencies in self.find_dependency_order(node):
-            for dependency in dependencies:
-                self._unload(dependency.name, dependency.package)
-                if not dependency.dependents:
-                    top_level.add(dependency)
+        with self._file_watchdog.modules_lock:
+            order = self.find_dependency_order(node)
+            for dependencies in order:
+                for dependency in dependencies:
+                    print(dependency.name, "unloaded")
+                    self._unload(dependency.name, dependency.package)
+                    if not dependency.dependents:
+                        top_level.add(dependency)
 
-        for dependency in top_level:
-            # Load the main extension again and related modules (automatically imports what it needs).
-            self.load_module(dependency.name, dependency.package)
+            for dependency in top_level:
+                # Load the main extension again and related modules (automatically imports what it needs).
+                self.load_module(dependency.name, dependency.package)
 
     def unload_module(self, name: str, package: str | None = None) -> None:
         """Unload a module.
@@ -201,7 +208,8 @@ class ReloadManager:
         node = self.modules[resolved_name]
         for dependency, _ in node.walk_dependencies():
             if not dependency.dependents:  # Safe to unload too
-                self._unload(name, package)
+                self._unload(dependency.name, dependency.package)
+                self._modules.pop(dependency.name)
 
     def find_dependency_order(
         self,
@@ -247,3 +255,14 @@ class ReloadManager:
             order[depth - min_depth].add(dependency)
 
         return order
+
+    def watch(self) -> None:
+        """Starts watching for file changes."""
+        self._file_watchdog.thread.start()
+
+        def closer(*args) -> None:
+            print("called")
+            self._file_watchdog.is_closed.set()
+
+        signal.signal(signal.SIGINT, closer)
+        signal.signal(signal.SIGTERM, closer)
