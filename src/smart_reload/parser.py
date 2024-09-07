@@ -5,20 +5,12 @@ import pathlib
 import sys
 
 
-def parse_module(path: str, *, is_package: bool) -> ast.Module | None:
+def parse_module(path: pathlib.Path) -> ast.Module:
     """
     Parse a module given its path, returning an ast object
     representing its source.
     """
-    if is_package:
-        path_ = (pathlib.Path(path) / "__init__.py").resolve()
-        if not path_.exists():
-            print("UwU")
-            return
-
-        path = path_.name
-
-    with open(path) as module_file:
+    with path.open() as module_file:
         module = ast.parse(module_file.read(), filename="<string>")
     return module
 
@@ -45,9 +37,9 @@ def resolve_name(
     if not package:
         if not fullname.startswith(".") and level == 0:
             # TODO: remove after testing or maybe log instead?
-            print(
-                f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {fullname!r}",
-            )
+            # print(
+            #     f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {fullname!r}",
+            # )
             return fullname
 
         # Should essentially never happen as the modules passed actual importing;
@@ -62,7 +54,7 @@ def resolve_name(
 
     resolved = f"{base}.{fullname}" if name else base
     # TODO: remove after testing or maybe log instead?
-    print(f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {resolved!r}.")
+    # print(f"resolved {{{module=}, {name=}, {package=}, {level=}}} to {resolved!r}.")
     return resolved
 
 

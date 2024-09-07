@@ -49,7 +49,6 @@ class ReloadManager:
         self.path = pathlib.Path(path) if path else pathlib.Path()
         self._file_watchdog = watchdog.SyncWatchdog(self, interval)
         self._modules = {}
-        self._resolved_modules: set[str] = set()
 
         self._load: _LoaderFunc = import_module
         self._unload: _LoaderFunc = unload_module
@@ -85,72 +84,65 @@ class ReloadManager:
 
         return unloader
 
-    def _build_module_nodes(
+    def build_module_nodes(
         self,
         name: str,
         package: str | None = None,
-    ) -> node_m.ModuleNode | None:
-        is_maybe_package: bool = False
+    ) -> node_m.ModuleNode:
         resolved_name = parser.resolve_name(name, package)
 
+        node = self._build_module_nodes(resolved_name, None, set())
+        assert node  # Should never not exist as name resolution would've failed.
+        return node
+
+    def _build_module_nodes(
+        self,
+        name: str,
+        package: str | None,
+        resolved: set[str],
+    ) -> node_m.ModuleNode | None:
+        resolved_name = parser.resolve_name(name, package)
+        resolved.add(resolved_name)
+
+        module = sys.modules[resolved_name]
+        if not module.__file__:
+            # This is a namespace package.
+            return None
+
+        path = pathlib.Path(module.__file__).resolve()
+        if path.is_dir():
+            # This is a namespace package.
+            return None
+
         try:
-            module_spec = importlib.util.find_spec(resolved_name)
-        except ModuleNotFoundError:
-            # couldn't load spec for this module
-            return None
-
-        if not module_spec or not module_spec.parent:
-            # incomplete module spec :(
-            # maybe we could try to get info in some other manner?
-            return None
-
-        if module_spec.origin is not None:
-            origin = module_spec.origin
-        elif module_spec.submodule_search_locations is not None:
-            # this is a package
-            origin = module_spec.submodule_search_locations[0]
-            is_maybe_package = True
-        else:
-            # should never happen? both module_spec.origin and
-            # module_spec.submodule_search_locations were None
-            return None
-
-        try:
-            data = parser.parse_module(origin, is_package=is_maybe_package)
+            data = parser.parse_module(path)
         except TypeError:
-            # skipping by default, this module is in the stdlib!
+            # This module isn't implemented in python; probably part of stdlib.
             return None
 
-        if not data:
-            # namespace package, ignore it
-            return None
-
-        # this is not a module that we should listen for
-        parents = [p.resolve() for p in pathlib.Path(origin).resolve().parents]
-        if self.path.resolve() not in parents:
+        # The module isn't on the path or whitelist; or is on the blacklist.
+        # TODO: Implement whitelist/blacklist
+        if self.path.resolve() not in path.parents:
             raise ValueError
 
-        node_visitor = parser.ModuleVisitor(module_spec.parent)
+        # Parse the module to find all imports.
+        node_visitor = parser.ModuleVisitor(module.__package__)
         node_visitor.visit(data)
         imported_modules = node_visitor.imported_modules
-        if self._resolved_modules.intersection(imported_modules):
-            return None
 
-        self._resolved_modules = self._resolved_modules.union(imported_modules)
-        node = node_m.ModuleNode(origin, name=name, package=package)
-
-        for module_ in imported_modules.copy():
+        # Make a node and recursively make nodes for its dependencies.
+        node = node_m.ModuleNode(str(path), name=name, package=package)
+        for module_name in imported_modules - resolved:
             try:
-                node_module = self._build_module_nodes(module_)
+                node_module = self._build_module_nodes(module_name, None, resolved)
+
             except ValueError:  # TODO: change this error to another that makes sense
-                imported_modules.remove(module_)
                 continue
 
             if node_module:
                 node.add_dependency(node_module)
-                self._modules[node_module.name] = node_module
-            else:
-                imported_modules.remove(module_)
+                self._modules[module_name] = node_module
+
         return node
 
     def load_module(self, name: str, package: str | None = None) -> None:
@@ -159,13 +151,13 @@ class ReloadManager:
         Automatically registers all child modules for use in reloading.
         """
         self._load(name, package)
-        _node = self._build_module_nodes(name, package)
+        node = self.build_module_nodes(name, package)
 
-        if not _node:
+        if not node:
             # maybe we should raise an error or a warning?
             return
 
-        self._modules[_node.name] = _node
+        self._modules[node.name] = node
 
     def reload_module(self, name: str, *, package: str | None = None) -> None:
         """Reload a module.
