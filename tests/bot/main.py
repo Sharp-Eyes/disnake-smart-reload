@@ -1,27 +1,20 @@
 from __future__ import annotations
+import sys
 
-import disnake
-import smart_reload
 from disnake.ext import commands
-from smart_reload import manager
+from smart_reload import hook
 
-# suppress the shitty warnings
-bot = commands.Bot(
-    command_prefix=commands.when_mentioned,
-    intents=disnake.Intents.none(),
-)
-manager = manager.ReloadManager("src")
+bot = commands.InteractionBot()
 
+print("LOADING")
+bot.load_extension("src.cogs.foo")
+print(id(sys.modules["src.cogs.foo"]))
 
-def unload_extension(name: str, package: str | None) -> None:
-    """Disnake compatibility layer for unload_module."""
-    try:
-        bot.unload_extension(name, package=package)
-    except commands.ExtensionNotFound:
-        smart_reload.unload_module(name, package)
+# TODO: Somehow make sure src.cogs.foo is reloaded as a disnake extension.
+print("\nRELOADING")
+hook.reload_module(sys.modules["src.utils.useful_file"])
+print(id(sys.modules["src.cogs.foo"]))
 
-
-manager.set_loader(lambda name, package: bot.load_extension(name, package=package))  # type: ignore
-manager.set_unloader(unload_extension)
-
-manager.load_module("src.cogs.foo")
+print("\nRELOADING AGAIN")
+hook.reload_module(sys.modules["src.cogs.bar"])
+print(id(sys.modules["src.cogs.foo"]))
