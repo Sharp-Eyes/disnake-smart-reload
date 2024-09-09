@@ -51,7 +51,7 @@ def reload_module(module: types.ModuleType) -> None:
 
 
 class ShittyLoader(importlib.machinery.SourceFileLoader):
-    def __init__(self, fullname: str, path: str) -> types.NoneType:
+    def __init__(self, fullname: str, path: str) -> None:
         super().__init__(fullname, path)
         self.fullname: str = fullname
         self.dependencies: typing.MutableSet[types.ModuleType] = weakref.WeakSet()
