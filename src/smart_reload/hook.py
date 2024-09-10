@@ -7,15 +7,26 @@ import importlib.machinery
 import importlib.util
 import pathlib
 import sys
+import types
 import typing
 import weakref
 
 from smart_reload import parser
 
-if typing.TYPE_CHECKING:
-    import types
+__all__: typing.Sequence[str] = (
+    "load_module",
+    "reload_module",
+    "unload_module",
+    "set_loader",
+    "set_unloader",
+    "register_hook",
+    "deregister_hook",
+)
 
-__all__: typing.Sequence[str] = ("reload_module", "register_hook", "deregister_hook")
+
+P = typing.ParamSpec("P")
+LoaderCallback = typing.Callable[[types.ModuleType], bool]
+LoaderCallbackT = typing.TypeVar("LoaderCallbackT", bound=LoaderCallback)
 
 
 # A sort-of mirror to sys.modules for modules loaded by our loader.
@@ -33,24 +44,53 @@ def _get_old_dependents(
     return old.__loader__.get_dependents()
 
 
-def reload_module(module: types.ModuleType) -> None:
-    """Reload a module."""
-    # https://docs.python.org/3/library/importlib.html#approximating-importlib-import-module
-    # First we remove the module from sys.modules.
-    sys.modules.pop(module.__name__, None)
+def load_module(name: str, package: str | None = None) -> None:
+    """Load a module. An alias of importlib.import_module."""
+    importlib.import_module(name, package)
 
-    # Now we import it again according to importlib's guide.
+
+def reload_module(name: str, package: str | None = None) -> None:
+    """Reload a module. For this to work, it must first have been imported."""
+    resolved = (
+        importlib.util.resolve_name(name, package)
+        if name.startswith(".")
+        else name
+    )
+    # Remove the module from sys.modules, then re-import it.
+    _reimport_module(sys.modules.pop(resolved))
+
+
+def _reimport_module(module: types.ModuleType) -> bool:
     spec = importlib.util.find_spec(module.__name__)
-    assert spec
-    assert spec.loader
+    assert spec  # TODO: Check if deleting a dependent file breaks this.
 
-    # New instance of old module; reflects any changes made to the file(s)
     new_module = importlib.util.module_from_spec(spec)
     sys.modules[new_module.__name__] = new_module
+
+    assert spec.loader
     spec.loader.exec_module(new_module)
+    return True
+
+
+def unload_module(name: str, package: str | None = None) -> None:
+    """Unload a module. For this to work, it must first have been imported."""
+    resolved = (
+        importlib.util.resolve_name(name, package)
+        if name.startswith(".")
+        else name
+    )
+    _unload_module(sys.modules[resolved])
+
+
+def _unload_module(module: types.ModuleType) -> bool:
+    del sys.modules[module.__name__]
+    return True
 
 
 class ShittyLoader(importlib.machinery.SourceFileLoader):
+    submodule_loader: LoaderCallback
+    submodule_unloader: LoaderCallback
+
     def __init__(self, fullname: str, path: str) -> None:
         super().__init__(fullname, path)
         self.fullname: str = fullname
@@ -81,10 +121,12 @@ class ShittyLoader(importlib.machinery.SourceFileLoader):
                 # we only need to do this for the remaining modules.
                 if dependent.__loader__ is not self:
                     print("~ unloading", dependent.__name__)
-                    del sys.modules[dependent.__name__]
+                    success = self.submodule_unloader(dependent)
+                    if not success:
+                        _unload_module(dependent)
                     del _MODULES[dependent.__name__]
 
-        # Reload dependents in load order,
+        # Reload dependents in load order.
         for dependent_group in dependents:
             for dependent in dependent_group:
                 print("~ reloading", dependent.__name__)
@@ -96,14 +138,9 @@ class ShittyLoader(importlib.machinery.SourceFileLoader):
 
                 else:
                     # https://docs.python.org/3/library/importlib.html#approximating-importlib-import-module
-                    spec = importlib.util.find_spec(dependent.__name__)
-                    assert spec  # TODO: Check if deleting a dependent file breaks this.
-
-                    module = importlib.util.module_from_spec(spec)
-                    sys.modules[module.__name__] = module
-
-                    assert spec.loader
-                    spec.loader.exec_module(module)
+                    success = self.submodule_loader(dependent)
+                    if not success:
+                        _reimport_module(dependent)
 
     def parse_module_dependents(self, module: types.ModuleType) -> None:
         """Recursively find a module's dependencies and dependents."""
@@ -187,9 +224,22 @@ class ShittyFinder(importlib.machinery.PathFinder):
         return spec
 
 
+def set_loader(loader: LoaderCallbackT) -> LoaderCallbackT:
+    ShittyLoader.submodule_loader = staticmethod(loader)
+    return loader
+
+
+def set_unloader(unloader: LoaderCallbackT) -> LoaderCallbackT:
+    ShittyLoader.submodule_unloader = staticmethod(unloader)
+    return unloader
+
+
 # Construct our finder object and set the default path to cwd.
 _FINDER = ShittyFinder()
 _FINDER.set_valid_paths(pathlib.Path())
+
+set_loader(_reimport_module)
+set_unloader(_unload_module)
 
 
 def register_hook() -> None:
