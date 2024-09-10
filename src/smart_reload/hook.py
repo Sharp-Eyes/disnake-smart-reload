@@ -11,12 +11,10 @@ import types
 import typing
 import weakref
 
+from smart_reload import entrypoint
 from smart_reload import parser
 
 __all__: typing.Sequence[str] = (
-    "load_module",
-    "reload_module",
-    "unload_module",
     "set_loader",
     "set_unloader",
     "register_hook",
@@ -42,49 +40,6 @@ def _get_old_dependents(
     old = _MODULES[module.__name__]
     assert isinstance(old.__loader__, ShittyLoader)
     return old.__loader__.get_dependents()
-
-
-def load_module(name: str, package: str | None = None) -> None:
-    """Load a module. An alias of importlib.import_module."""
-    importlib.import_module(name, package)
-
-
-def reload_module(name: str, package: str | None = None) -> None:
-    """Reload a module. For this to work, it must first have been imported."""
-    resolved = (
-        importlib.util.resolve_name(name, package)
-        if name.startswith(".")
-        else name
-    )
-    # Remove the module from sys.modules, then re-import it.
-    _reimport_module(sys.modules.pop(resolved))
-
-
-def _reimport_module(module: types.ModuleType) -> bool:
-    spec = importlib.util.find_spec(module.__name__)
-    assert spec  # TODO: Check if deleting a dependent file breaks this.
-
-    new_module = importlib.util.module_from_spec(spec)
-    sys.modules[new_module.__name__] = new_module
-
-    assert spec.loader
-    spec.loader.exec_module(new_module)
-    return True
-
-
-def unload_module(name: str, package: str | None = None) -> None:
-    """Unload a module. For this to work, it must first have been imported."""
-    resolved = (
-        importlib.util.resolve_name(name, package)
-        if name.startswith(".")
-        else name
-    )
-    _unload_module(sys.modules[resolved])
-
-
-def _unload_module(module: types.ModuleType) -> bool:
-    del sys.modules[module.__name__]
-    return True
 
 
 class ShittyLoader(importlib.machinery.SourceFileLoader):
@@ -123,7 +78,7 @@ class ShittyLoader(importlib.machinery.SourceFileLoader):
                     print("~ unloading", dependent.__name__)
                     success = self.submodule_unloader(dependent)
                     if not success:
-                        _unload_module(dependent)
+                        entrypoint._unload_module(dependent)  # type: ignore
                     del _MODULES[dependent.__name__]
 
         # Reload dependents in load order.
@@ -140,7 +95,7 @@ class ShittyLoader(importlib.machinery.SourceFileLoader):
                     # https://docs.python.org/3/library/importlib.html#approximating-importlib-import-module
                     success = self.submodule_loader(dependent)
                     if not success:
-                        _reimport_module(dependent)
+                        entrypoint._reimport_module(dependent)  # type: ignore
 
     def parse_module_dependents(self, module: types.ModuleType) -> None:
         """Recursively find a module's dependencies and dependents."""
@@ -225,11 +180,19 @@ class ShittyFinder(importlib.machinery.PathFinder):
 
 
 def set_loader(loader: LoaderCallbackT) -> LoaderCallbackT:
+    """Set the provided callback as the loader for all imports.
+
+    Can be used as a decorator.
+    """
     ShittyLoader.submodule_loader = staticmethod(loader)
     return loader
 
 
 def set_unloader(unloader: LoaderCallbackT) -> LoaderCallbackT:
+    """Set the provided callback as the unloader for all reloads.
+
+    Can be used as a decorator.
+    """
     ShittyLoader.submodule_unloader = staticmethod(unloader)
     return unloader
 
@@ -238,8 +201,8 @@ def set_unloader(unloader: LoaderCallbackT) -> LoaderCallbackT:
 _FINDER = ShittyFinder()
 _FINDER.set_valid_paths(pathlib.Path())
 
-set_loader(_reimport_module)
-set_unloader(_unload_module)
+set_loader(entrypoint._reimport_module) # type: ignore
+set_unloader(entrypoint._unload_module) # type: ignore
 
 
 def register_hook() -> None:
